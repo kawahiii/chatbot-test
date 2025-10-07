@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>簡単チャットボット</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    #chat { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: scroll; }
+    input { width: 80%; padding: 5px; }
+    button { padding: 5px 10px; }
+  </style>
+</head>
+<body>
+  <h2>簡単チャットボット</h2>
+  <div id="chat"></div>
+  <input id="message" placeholder="メッセージを入力...">
+  <button onclick="sendMessage()">送信</button>
+
+  <script>
+    const chat = document.getElementById('chat');
+
+    function appendMessage(sender, text) {
+      const msg = document.createElement('div');
+      msg.textContent = `${sender}: ${text}`;
+      chat.appendChild(msg);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('message');
+      const text = input.value.trim();
+      if (!text) return;
+      appendMessage('あなた', text);
+      input.value = '';
+
+      // 3秒後に自動返信
+      setTimeout(() => {
+        appendMessage('ボット', `「${text}」っていいね！`);
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
