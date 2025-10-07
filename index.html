@@ -4,26 +4,93 @@
   <meta charset="UTF-8">
   <title>簡単チャットボット</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    #chat { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: scroll; }
-    input { width: 80%; padding: 5px; }
-    button { padding: 5px 10px; }
+    body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+    #chat { border: 1px solid #ccc; padding: 10px; height: 240px; overflow-y: scroll; margin-bottom: 16px; }
+    .row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .row input[type="text"] { flex: 1; padding: 6px; }
+    .row button { padding: 6px 12px; }
+    fieldset { border: 1px solid #bbb; padding: 12px; margin-bottom: 16px; }
+    legend { font-weight: bold; }
+    label { display: block; margin-bottom: 4px; }
+    input[type="datetime-local"] { padding: 6px; }
+    #scheduleList { font-size: 0.9em; }
+    #scheduleList li { margin-bottom: 4px; }
+    #notificationStatus { font-size: 0.9em; color: #555; }
   </style>
 </head>
 <body>
   <h2>簡単チャットボット</h2>
   <div id="chat"></div>
-  <input id="message" placeholder="メッセージを入力...">
-  <button onclick="sendMessage()">送信</button>
+  <div class="row">
+    <input id="message" placeholder="メッセージを入力...">
+    <button onclick="sendMessage()">送信</button>
+  </div>
+
+  <fieldset>
+    <legend>通知の許可</legend>
+    <p>ボタンを押してブラウザに通知を許可すると、メッセージ送信時にデスクトップ通知が表示されます。</p>
+    <button onclick="requestNotificationPermission()">通知を有効にする</button>
+    <p id="notificationStatus">未確認</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>メッセージの予約送信</legend>
+    <label for="scheduledMessage">送りたいメッセージ</label>
+    <input id="scheduledMessage" type="text" placeholder="例：13時にリマインド" />
+    <label for="scheduleTime">送信する日時</label>
+    <input id="scheduleTime" type="datetime-local" />
+    <div class="row">
+      <button onclick="scheduleMessage()">予約する</button>
+      <button onclick="clearSchedule()">すべての予約をキャンセル</button>
+    </div>
+    <p>予約中のメッセージ:</p>
+    <ul id="scheduleList"></ul>
+  </fieldset>
 
   <script>
     const chat = document.getElementById('chat');
+    const notificationStatus = document.getElementById('notificationStatus');
+    const scheduleList = document.getElementById('scheduleList');
+    const scheduledItems = [];
 
     function appendMessage(sender, text) {
       const msg = document.createElement('div');
       msg.textContent = `${sender}: ${text}`;
       chat.appendChild(msg);
       chat.scrollTop = chat.scrollHeight;
+    }
+
+    function updateNotificationStatus(message) {
+      notificationStatus.textContent = message;
+    }
+
+    function requestNotificationPermission() {
+      if (!('Notification' in window)) {
+        updateNotificationStatus('このブラウザは通知に対応していません。');
+        return;
+      }
+
+      if (Notification.permission === 'granted') {
+        updateNotificationStatus('すでに通知が許可されています。');
+        return;
+      }
+
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          updateNotificationStatus('通知が許可されました。');
+        } else if (permission === 'denied') {
+          updateNotificationStatus('通知は拒否されました。ブラウザの設定で変更できます。');
+        } else {
+          updateNotificationStatus('通知は保留状態です。');
+        }
+      });
+    }
+
+    function showNotification(title, body) {
+      if (!('Notification' in window)) return;
+      if (Notification.permission !== 'granted') return;
+
+      new Notification(title, { body });
     }
 
     function sendMessage() {
@@ -36,8 +103,90 @@
       // 3秒後に自動返信
       setTimeout(() => {
         appendMessage('ボット', `「${text}」っていいね！`);
+        showNotification('ボットからの返信', `「${text}」っていいね！`);
       }, 3000);
+
+      showNotification('メッセージを送信しました', text);
     }
+
+    function renderScheduleList() {
+      scheduleList.innerHTML = '';
+      if (scheduledItems.length === 0) {
+        const empty = document.createElement('li');
+        empty.textContent = '現在予約はありません。';
+        scheduleList.appendChild(empty);
+        return;
+      }
+
+      scheduledItems
+        .sort((a, b) => a.time - b.time)
+        .forEach(item => {
+          const li = document.createElement('li');
+          li.textContent = `${item.time.toLocaleString()} に「${item.text}」`;
+          scheduleList.appendChild(li);
+        });
+    }
+
+    function scheduleMessage() {
+      const text = document.getElementById('scheduledMessage').value.trim();
+      const timeValue = document.getElementById('scheduleTime').value;
+
+      if (!text) {
+        alert('メッセージを入力してください。');
+        return;
+      }
+
+      if (!timeValue) {
+        alert('送信する日時を選択してください。');
+        return;
+      }
+
+      const targetTime = new Date(timeValue);
+      if (Number.isNaN(targetTime.getTime())) {
+        alert('日時の形式が正しくありません。');
+        return;
+      }
+
+      const delay = targetTime.getTime() - Date.now();
+      if (delay <= 0) {
+        alert('未来の日時を選んでください。');
+        return;
+      }
+
+      const timeoutId = setTimeout(() => {
+        appendMessage('予約メッセージ', text);
+        showNotification('予約メッセージ', text);
+
+        const index = scheduledItems.findIndex(item => item.timeoutId === timeoutId);
+        if (index !== -1) {
+          scheduledItems.splice(index, 1);
+          renderScheduleList();
+        }
+      }, delay);
+
+      scheduledItems.push({ text, time: targetTime, timeoutId });
+      renderScheduleList();
+
+      document.getElementById('scheduledMessage').value = '';
+    }
+
+    function clearSchedule() {
+      scheduledItems.forEach(item => clearTimeout(item.timeoutId));
+      scheduledItems.length = 0;
+      renderScheduleList();
+    }
+
+    function init() {
+      if ('Notification' in window) {
+        updateNotificationStatus(`現在の状態: ${Notification.permission}`);
+      } else {
+        updateNotificationStatus('このブラウザは通知に対応していません。');
+      }
+
+      renderScheduleList();
+    }
+
+    init();
   </script>
 </body>
 </html>
